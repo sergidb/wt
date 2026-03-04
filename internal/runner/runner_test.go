@@ -1,10 +1,13 @@
 package runner
 
 import (
+	"bytes"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/sergidb/wt/internal/colors"
+	"github.com/sergidb/wt/internal/config"
 )
 
 func TestFormatPrefix(t *testing.T) {
@@ -69,5 +72,87 @@ func TestFormatPrefixInvalidColor(t *testing.T) {
 	// Should fall back to white
 	if !strings.Contains(got, colors.ANSICodes["white"]) {
 		t.Error("expected white fallback for invalid color")
+	}
+}
+
+func TestRunNoServices(t *testing.T) {
+	var buf bytes.Buffer
+	err := Run(map[string]config.Service{}, "/tmp", &buf)
+	if err == nil {
+		t.Fatal("expected error for empty services")
+	}
+	if !strings.Contains(err.Error(), "no services") {
+		t.Errorf("error = %q, want to contain 'no services'", err.Error())
+	}
+}
+
+func TestRunSimpleServices(t *testing.T) {
+	var buf bytes.Buffer
+	services := map[string]config.Service{
+		"echo1": {Cmd: "echo hello", Dir: "."},
+		"echo2": {Cmd: "echo world", Dir: ".", Color: "cyan"},
+	}
+
+	err := Run(services, "/tmp", &buf)
+	if err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "hello") {
+		t.Error("expected 'hello' in output")
+	}
+	if !strings.Contains(output, "world") {
+		t.Error("expected 'world' in output")
+	}
+}
+
+func TestRunServiceWithEnv(t *testing.T) {
+	var buf bytes.Buffer
+	services := map[string]config.Service{
+		"env": {
+			Cmd:   "echo $MY_TEST_VAR",
+			Dir:   ".",
+			Color: "green",
+			Env:   map[string]string{"MY_TEST_VAR": "it_works"},
+		},
+	}
+
+	err := Run(services, "/tmp", &buf)
+	if err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+
+	if !strings.Contains(buf.String(), "it_works") {
+		t.Errorf("expected env var in output, got: %s", buf.String())
+	}
+}
+
+func TestRunServiceFailure(t *testing.T) {
+	var buf bytes.Buffer
+	services := map[string]config.Service{
+		"fail": {Cmd: "exit 1", Dir: "."},
+	}
+
+	err := Run(services, "/tmp", &buf)
+	if err == nil {
+		t.Fatal("expected error for failing service")
+	}
+}
+
+func TestStreamLines(t *testing.T) {
+	var buf bytes.Buffer
+	r := strings.NewReader("line1\nline2\nline3\n")
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go streamLines(&wg, r, "[test]", &buf)
+	wg.Wait()
+
+	output := buf.String()
+	for _, want := range []string{"[test] line1", "[test] line2", "[test] line3"} {
+		if !strings.Contains(output, want) {
+			t.Errorf("expected %q in output, got: %s", want, output)
+		}
 	}
 }

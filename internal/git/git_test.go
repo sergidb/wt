@@ -169,3 +169,150 @@ func TestRepoRoot(t *testing.T) {
 		t.Errorf("RepoRoot() = %q, want %q", gotRoot, wantRoot)
 	}
 }
+
+// initGitRepo creates a git repo with an initial commit and returns its resolved path.
+func initGitRepo(t *testing.T) string {
+	t.Helper()
+	tmp := t.TempDir()
+
+	cmds := [][]string{
+		{"git", "init", tmp},
+		{"git", "-C", tmp, "config", "user.email", "test@test.com"},
+		{"git", "-C", tmp, "config", "user.name", "Test"},
+	}
+	for _, args := range cmds {
+		if out, err := exec.Command(args[0], args[1:]...).CombinedOutput(); err != nil {
+			t.Fatalf("%v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	// Create initial commit so branches work
+	f := filepath.Join(tmp, "README.md")
+	os.WriteFile(f, []byte("# test"), 0644)
+	exec.Command("git", "-C", tmp, "add", ".").Run()
+	exec.Command("git", "-C", tmp, "commit", "-m", "init").Run()
+
+	resolved, _ := filepath.EvalSymlinks(tmp)
+	return resolved
+}
+
+func TestWorktreeList(t *testing.T) {
+	repo := initGitRepo(t)
+
+	wts, err := WorktreeList(repo)
+	if err != nil {
+		t.Fatalf("WorktreeList() error: %v", err)
+	}
+	if len(wts) < 1 {
+		t.Fatal("expected at least 1 worktree")
+	}
+
+	resolved, _ := filepath.EvalSymlinks(wts[0].Path)
+	if resolved != repo {
+		t.Errorf("first worktree path = %q, want %q", resolved, repo)
+	}
+}
+
+func TestWorktreeAddAndRemove(t *testing.T) {
+	repo := initGitRepo(t)
+
+	wtPath := filepath.Join(t.TempDir(), "feat-test")
+
+	// Add worktree with new branch
+	if err := WorktreeAdd(repo, wtPath, "feat-test", true); err != nil {
+		t.Fatalf("WorktreeAdd() error: %v", err)
+	}
+
+	// Verify it appears in the list
+	wts, err := WorktreeList(repo)
+	if err != nil {
+		t.Fatalf("WorktreeList() error: %v", err)
+	}
+
+	found := false
+	for _, wt := range wts {
+		resolved, _ := filepath.EvalSymlinks(wt.Path)
+		resolvedWT, _ := filepath.EvalSymlinks(wtPath)
+		if resolved == resolvedWT {
+			found = true
+			if wt.BranchShort() != "feat-test" {
+				t.Errorf("branch = %q, want %q", wt.BranchShort(), "feat-test")
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("added worktree not found in list")
+	}
+
+	// Remove it — WorktreeRemove runs git from cwd, so chdir to repo
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(repo); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	if err := WorktreeRemove(wtPath, false); err != nil {
+		t.Fatalf("WorktreeRemove() error: %v", err)
+	}
+
+	// Verify it's gone
+	wts, err = WorktreeList(repo)
+	if err != nil {
+		t.Fatalf("WorktreeList() after remove error: %v", err)
+	}
+	for _, wt := range wts {
+		resolved, _ := filepath.EvalSymlinks(wt.Path)
+		resolvedWT, _ := filepath.EvalSymlinks(wtPath)
+		if resolved == resolvedWT {
+			t.Error("removed worktree still appears in list")
+		}
+	}
+}
+
+func TestBranchExists(t *testing.T) {
+	repo := initGitRepo(t)
+
+	// Default branch should exist
+	// Find the default branch name (could be main or master)
+	wts, _ := WorktreeList(repo)
+	defaultBranch := wts[0].BranchShort()
+
+	if !BranchExists(repo, defaultBranch) {
+		t.Errorf("BranchExists(%q) = false, want true", defaultBranch)
+	}
+
+	if BranchExists(repo, "nonexistent-branch-xyz") {
+		t.Error("BranchExists(nonexistent) = true, want false")
+	}
+}
+
+func TestWorktreePrune(t *testing.T) {
+	repo := initGitRepo(t)
+
+	// Prune on a clean repo should succeed
+	if err := WorktreePrune(repo); err != nil {
+		t.Fatalf("WorktreePrune() error: %v", err)
+	}
+}
+
+func TestWorktreeRoot(t *testing.T) {
+	repo := initGitRepo(t)
+
+	origDir, _ := os.Getwd()
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	if err := os.Chdir(repo); err != nil {
+		t.Fatal(err)
+	}
+
+	root, err := WorktreeRoot()
+	if err != nil {
+		t.Fatalf("WorktreeRoot() error: %v", err)
+	}
+
+	gotRoot, _ := filepath.EvalSymlinks(root)
+	if gotRoot != repo {
+		t.Errorf("WorktreeRoot() = %q, want %q", gotRoot, repo)
+	}
+}
