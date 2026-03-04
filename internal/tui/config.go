@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/sergidb/wt/internal/colors"
 	"github.com/sergidb/wt/internal/config"
 )
 
@@ -19,8 +20,6 @@ const (
 	cfgScreenEdit
 	cfgScreenDelete
 )
-
-var availableColors = []string{"green", "cyan", "yellow", "magenta", "blue", "red", "white"}
 
 // Color codes for preview blocks
 var colorPreview = map[string]lipgloss.Color{
@@ -150,7 +149,7 @@ func (m *configModel) startEdit() {
 
 	// Find color index
 	m.colorIdx = 0
-	for i, c := range availableColors {
+	for i, c := range colors.Names {
 		if c == svc.Color {
 			m.colorIdx = i
 			break
@@ -317,11 +316,11 @@ func (m configModel) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "left", "right":
 			if msg.String() == "right" {
-				m.colorIdx = (m.colorIdx + 1) % len(availableColors)
+				m.colorIdx = (m.colorIdx + 1) % len(colors.Names)
 			} else {
-				m.colorIdx = (m.colorIdx - 1 + len(availableColors)) % len(availableColors)
+				m.colorIdx = (m.colorIdx - 1 + len(colors.Names)) % len(colors.Names)
 			}
-			m.inputs[fieldColor].SetValue(availableColors[m.colorIdx])
+			m.inputs[fieldColor].SetValue(colors.Names[m.colorIdx])
 			return m, nil
 		}
 	}

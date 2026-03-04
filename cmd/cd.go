@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+
 	"github.com/sergidb/wt/internal/git"
 	"github.com/sergidb/wt/internal/shell"
 	"github.com/sergidb/wt/internal/worktree"
@@ -21,7 +23,7 @@ var cdCmd = &cobra.Command{
 			return err
 		}
 
-		wts, err := worktree.List(repoRoot)
+		wts, err := worktree.List(git.ExecOps{}, repoRoot)
 		if err != nil {
 			return err
 		}
@@ -31,7 +33,7 @@ var cdCmd = &cobra.Command{
 			return err
 		}
 
-		shell.PrintCdPath(wt.Path)
+		shell.PrintCdPath(os.Stdout, wt.Path)
 		return nil
 	},
 }

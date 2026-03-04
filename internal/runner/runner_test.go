@@ -1,0 +1,73 @@
+package runner
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/sergidb/wt/internal/colors"
+)
+
+func TestFormatPrefix(t *testing.T) {
+	tests := []struct {
+		name   string
+		maxLen int
+		color  string
+		want   string // substring that must appear
+	}{
+		{
+			name:   "web",
+			maxLen: 5,
+			color:  "green",
+			want:   "[web  ]",
+		},
+		{
+			name:   "api-server",
+			maxLen: 10,
+			color:  "cyan",
+			want:   "[api-server]",
+		},
+		{
+			name:   "svc",
+			maxLen: 3,
+			color:  "invalid",
+			want:   "[svc]", // falls back to white
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatPrefix(tt.name, tt.maxLen, tt.color)
+			if !strings.Contains(got, tt.want) {
+				t.Errorf("formatPrefix(%q, %d, %q) = %q, want to contain %q", tt.name, tt.maxLen, tt.color, got, tt.want)
+			}
+
+			// Should contain ANSI codes
+			if !strings.Contains(got, "\033[") {
+				t.Error("expected ANSI color codes in output")
+			}
+
+			// Should end with reset
+			if !strings.HasSuffix(got, colors.ANSIReset) {
+				t.Error("expected color reset at end")
+			}
+		})
+	}
+}
+
+func TestFormatPrefixAlignment(t *testing.T) {
+	p1 := formatPrefix("a", 5, "green")
+	p2 := formatPrefix("abcde", 5, "green")
+
+	// Both should have the same length (same ANSI overhead + same maxLen)
+	if len(p1) != len(p2) {
+		t.Errorf("prefixes should have same length: len(%q)=%d, len(%q)=%d", p1, len(p1), p2, len(p2))
+	}
+}
+
+func TestFormatPrefixInvalidColor(t *testing.T) {
+	got := formatPrefix("svc", 3, "nonexistent")
+	// Should fall back to white
+	if !strings.Contains(got, colors.ANSICodes["white"]) {
+		t.Error("expected white fallback for invalid color")
+	}
+}

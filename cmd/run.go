@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/sergidb/wt/internal/config"
 	"github.com/sergidb/wt/internal/git"
@@ -47,7 +48,7 @@ Examples:
 			}
 		} else {
 			// First arg might be a worktree name or a service name
-			wts, err := worktree.List(repoRoot)
+			wts, err := worktree.List(git.ExecOps{}, repoRoot)
 			if err != nil {
 				return err
 			}
@@ -82,7 +83,7 @@ Examples:
 			services = filtered
 		}
 
-		return runner.Run(services, wtPath)
+		return runner.Run(services, wtPath, os.Stderr)
 	},
 }
 

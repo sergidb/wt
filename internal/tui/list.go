@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/sergidb/wt/internal/shell"
+	"github.com/sergidb/wt/internal/git"
 	"github.com/sergidb/wt/internal/worktree"
 )
 
@@ -33,7 +33,7 @@ type model struct {
 	screen    screen
 	actions   []string
 	actionIdx int
-	result    string
+	result    Result
 	quitting  bool
 	repoRoot  string
 }
@@ -82,11 +82,11 @@ func (m model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "d":
 		wt := m.worktrees[m.cursor]
 		if !wt.IsMain {
-			m.result = "rm:" + wt.Name
+			m.result = Result{Kind: ActionRm, Name: wt.Name}
 			return m, tea.Quit
 		}
 	case "c":
-		m.result = "config"
+		m.result = Result{Kind: ActionConfig}
 		return m, tea.Quit
 	}
 	return m, nil
@@ -112,17 +112,14 @@ func (m model) updateActions(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		action := m.actions[m.actionIdx]
 		switch action {
 		case "cd":
-			m.result = shell.CdPrefix + wt.Path
+			m.result = Result{Kind: ActionCd, Path: wt.Path}
 			return m, tea.Quit
 		case "run":
-			m.result = "run:" + wt.Path
-			return m, tea.Quit
-		case "info":
-			m.result = "info:" + wt.Name
+			m.result = Result{Kind: ActionRun, Path: wt.Path}
 			return m, tea.Quit
 		case "remove":
 			if !wt.IsMain {
-				m.result = "rm:" + wt.Name
+				m.result = Result{Kind: ActionRm, Name: wt.Name}
 				return m, tea.Quit
 			}
 		case "back":
@@ -191,11 +188,7 @@ func (m model) viewList() string {
 
 		// Path (always shown, relative to repo root)
 		relPath := m.relativePath(wt.Path)
-		if isSelected {
-			b.WriteString(dimStyle.Render("     "+relPath) + "\n")
-		} else {
-			b.WriteString(dimStyle.Render("     "+relPath) + "\n")
-		}
+		b.WriteString(dimStyle.Render("     "+relPath) + "\n")
 	}
 
 	// Status bar
@@ -277,22 +270,22 @@ func (m model) relativePath(absPath string) string {
 	return rel
 }
 
-// Run launches the interactive TUI and returns the result string.
-func Run(repoRoot string) (string, error) {
-	wts, err := worktree.List(repoRoot)
+// Run launches the interactive TUI and returns a typed Result.
+func Run(repoRoot string) (Result, error) {
+	wts, err := worktree.List(git.ExecOps{}, repoRoot)
 	if err != nil {
-		return "", err
+		return Result{}, err
 	}
 
 	if len(wts) == 0 {
-		return "", fmt.Errorf("no worktrees found")
+		return Result{}, fmt.Errorf("no worktrees found")
 	}
 
 	m := initialModel(repoRoot, wts)
 	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
 	finalModel, err := p.Run()
 	if err != nil {
-		return "", err
+		return Result{}, err
 	}
 
 	fm := finalModel.(model)

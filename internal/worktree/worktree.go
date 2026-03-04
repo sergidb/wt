@@ -44,11 +44,12 @@ func ClaudeWorktreesDir(repoRoot string) string {
 }
 
 // List returns all discovered worktrees, merging git worktrees and .claude/worktrees.
-func List(repoRoot string) ([]Worktree, error) {
+// It accepts a git.Ops to abstract git commands for testability.
+func List(ops git.Ops, repoRoot string) ([]Worktree, error) {
 	seen := make(map[string]*Worktree) // keyed by absolute path
 
 	// 1. Parse git worktree list
-	rawList, err := git.WorktreeList(repoRoot)
+	rawList, err := ops.WorktreeList(repoRoot)
 	if err != nil {
 		return nil, err
 	}

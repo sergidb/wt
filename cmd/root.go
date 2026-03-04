@@ -3,11 +3,11 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/sergidb/wt/internal/config"
 	"github.com/sergidb/wt/internal/git"
 	"github.com/sergidb/wt/internal/runner"
+	"github.com/sergidb/wt/internal/shell"
 	"github.com/sergidb/wt/internal/tui"
 	"github.com/sergidb/wt/internal/worktree"
 	"github.com/spf13/cobra"
@@ -28,32 +28,28 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 
-		if result == "config" {
+		switch result.Kind {
+		case tui.ActionNone:
+			return nil
+		case tui.ActionConfig:
 			return tui.RunConfig(repoRoot)
-		}
-
-		if strings.HasPrefix(result, "run:") {
-			wtPath := strings.TrimPrefix(result, "run:")
+		case tui.ActionRun:
 			cfg, err := config.Load(repoRoot)
 			if err != nil {
 				return err
 			}
-			return runner.Run(cfg.Services, wtPath)
-		}
-
-		if strings.HasPrefix(result, "rm:") {
-			name := strings.TrimPrefix(result, "rm:")
+			return runner.Run(cfg.Services, result.Path, os.Stderr)
+		case tui.ActionRm:
 			if err := git.WorktreeRemove(
-				findWorktreePath(repoRoot, name), false,
+				findWorktreePath(repoRoot, result.Name), false,
 			); err != nil {
-				return fmt.Errorf("failed to remove worktree '%s': %w", name, err)
+				return fmt.Errorf("failed to remove worktree '%s': %w", result.Name, err)
 			}
-			fmt.Fprintf(os.Stderr, "Removed worktree '%s'\n", name)
+			fmt.Fprintf(os.Stderr, "Removed worktree '%s'\n", result.Name)
 			return nil
-		}
-
-		if result != "" {
-			fmt.Print(result)
+		case tui.ActionCd:
+			shell.PrintCdPath(os.Stdout, result.Path)
+			return nil
 		}
 
 		return nil
@@ -67,7 +63,7 @@ func Execute() {
 }
 
 func findWorktreePath(repoRoot, name string) string {
-	wts, err := worktree.List(repoRoot)
+	wts, err := worktree.List(git.ExecOps{}, repoRoot)
 	if err != nil {
 		return name
 	}

@@ -13,22 +13,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sergidb/wt/internal/colors"
 	"github.com/sergidb/wt/internal/config"
 )
-
-var defaultColors = []string{"green", "cyan", "yellow", "magenta", "blue", "red"}
-
-var colorCodes = map[string]string{
-	"red":     "\033[31m",
-	"green":   "\033[32m",
-	"yellow":  "\033[33m",
-	"blue":    "\033[34m",
-	"magenta": "\033[35m",
-	"cyan":    "\033[36m",
-	"white":   "\033[37m",
-}
-
-const colorReset = "\033[0m"
 
 type runningService struct {
 	name  string
@@ -38,7 +25,7 @@ type runningService struct {
 
 // Run starts all given services in parallel with colored prefix output.
 // It blocks until all services exit or a signal is received.
-func Run(services map[string]config.Service, worktreePath string) error {
+func Run(services map[string]config.Service, worktreePath string, out io.Writer) error {
 	if len(services) == 0 {
 		return fmt.Errorf("no services to run")
 	}
@@ -59,7 +46,7 @@ func Run(services map[string]config.Service, worktreePath string) error {
 	for name, svc := range services {
 		color := svc.Color
 		if color == "" {
-			color = defaultColors[colorIdx%len(defaultColors)]
+			color = colors.Names[colorIdx%len(colors.Names)]
 			colorIdx++
 		}
 
@@ -86,7 +73,7 @@ func Run(services map[string]config.Service, worktreePath string) error {
 
 		prefix := formatPrefix(name, maxLen, color)
 
-		fmt.Fprintf(os.Stderr,"%s Starting %s...\n", prefix, svc.Cmd)
+		fmt.Fprintf(out, "%s Starting %s...\n", prefix, svc.Cmd)
 
 		if err := cmd.Start(); err != nil {
 			return fmt.Errorf("starting %s: %w", name, err)
@@ -96,8 +83,8 @@ func Run(services map[string]config.Service, worktreePath string) error {
 
 		// Stream stdout and stderr with prefixes
 		wg.Add(2)
-		go streamLines(&wg, stdout, prefix)
-		go streamLines(&wg, stderr, prefix)
+		go streamLines(&wg, stdout, prefix, out)
+		go streamLines(&wg, stderr, prefix, out)
 	}
 
 	// Signal handling
@@ -115,7 +102,7 @@ func Run(services map[string]config.Service, worktreePath string) error {
 	case <-doneCh:
 		// All pipes closed, wait for processes
 	case sig := <-sigCh:
-		fmt.Fprintf(os.Stderr,"\n%sReceived %s, shutting down...%s\n", colorCodes["yellow"], sig, colorReset)
+		fmt.Fprintf(out, "\n%sReceived %s, shutting down...%s\n", colors.ANSICodes["yellow"], sig, colors.ANSIReset)
 		shutdown(running)
 	}
 
@@ -164,19 +151,19 @@ func shutdown(services []runningService) {
 	}
 }
 
-func streamLines(wg *sync.WaitGroup, r io.Reader, prefix string) {
+func streamLines(wg *sync.WaitGroup, r io.Reader, prefix string, out io.Writer) {
 	defer wg.Done()
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
-		fmt.Fprintf(os.Stderr,"%s %s\n", prefix, scanner.Text())
+		fmt.Fprintf(out, "%s %s\n", prefix, scanner.Text())
 	}
 }
 
 func formatPrefix(name string, maxLen int, color string) string {
 	padded := name + strings.Repeat(" ", maxLen-len(name))
-	code := colorCodes[color]
+	code := colors.ANSICodes[color]
 	if code == "" {
-		code = colorCodes["white"]
+		code = colors.ANSICodes["white"]
 	}
-	return fmt.Sprintf("%s[%s]%s", code, padded, colorReset)
+	return fmt.Sprintf("%s[%s]%s", code, padded, colors.ANSIReset)
 }

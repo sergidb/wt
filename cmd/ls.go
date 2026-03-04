@@ -23,7 +23,7 @@ var lsCmd = &cobra.Command{
 			return err
 		}
 
-		wts, err := worktree.List(repoRoot)
+		wts, err := worktree.List(git.ExecOps{}, repoRoot)
 		if err != nil {
 			return err
 		}

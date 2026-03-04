@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+
 	"github.com/sergidb/wt/internal/git"
 	"github.com/sergidb/wt/internal/shell"
 	"github.com/spf13/cobra"
@@ -19,7 +21,7 @@ var homeCmd = &cobra.Command{
 			return err
 		}
 
-		shell.PrintCdPath(repoRoot)
+		shell.PrintCdPath(os.Stdout, repoRoot)
 		return nil
 	},
 }
