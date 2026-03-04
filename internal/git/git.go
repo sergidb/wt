@@ -50,6 +50,16 @@ func RepoRoot() (string, error) {
 	return root, nil
 }
 
+// WorktreeRoot returns the top-level directory of the current worktree.
+// Unlike RepoRoot, this returns the worktree's own root, not the main repo root.
+func WorktreeRoot() (string, error) {
+	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return "", fmt.Errorf("not inside a git repository: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
 // WorktreeList runs `git worktree list --porcelain` and parses the output.
 func WorktreeList(repoRoot string) ([]RawWorktree, error) {
 	cmd := exec.Command("git", "worktree", "list", "--porcelain")
