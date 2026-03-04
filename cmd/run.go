@@ -47,7 +47,7 @@ Examples:
 			}
 		} else {
 			// First arg might be a worktree name or a service name
-			wts, err := worktree.List(repoRoot)
+			wts, err := worktree.List(repoRoot, cfg.GetWorktreesDir(repoRoot))
 			if err != nil {
 				return err
 			}

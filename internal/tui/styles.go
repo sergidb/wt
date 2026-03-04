@@ -17,7 +17,7 @@ var (
 	colorLightGray = lipgloss.Color("252") // Light gray
 	colorDim       = lipgloss.Color("245") // Medium gray
 	colorMuted     = lipgloss.Color("240") // Dark gray
-	colorClaude    = lipgloss.Color("173") // Claude orange
+	colorManaged = lipgloss.Color("173") // Managed worktree accent
 )
 
 // Brand — D4 signature
@@ -83,8 +83,8 @@ var (
 	badgeGitStyle = lipgloss.NewStyle().
 			Foreground(colorSecondary)
 
-	badgeClaudeStyle = lipgloss.NewStyle().
-				Foreground(colorClaude)
+	badgeManagedStyle = lipgloss.NewStyle().
+				Foreground(colorManaged)
 )
 
 // Actions

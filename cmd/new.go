@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/sergidb/wt/internal/config"
 	"github.com/sergidb/wt/internal/git"
-	"github.com/sergidb/wt/internal/worktree"
 	"github.com/spf13/cobra"
 )
 
@@ -16,7 +16,7 @@ func init() {
 var newCmd = &cobra.Command{
 	Use:   "new <branch>",
 	Short: "Create a new worktree",
-	Long:  "Creates a new worktree in .claude/worktrees/<branch>. Creates the branch if it doesn't exist.",
+	Long:  "Creates a new worktree in the configured worktrees directory. Creates the branch if it doesn't exist.",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		branch := args[0]
@@ -26,7 +26,8 @@ var newCmd = &cobra.Command{
 			return err
 		}
 
-		wtPath := filepath.Join(worktree.ClaudeWorktreesDir(repoRoot), branch)
+		cfg := config.LoadOrEmpty(repoRoot)
+		wtPath := filepath.Join(cfg.GetWorktreesDir(repoRoot), branch)
 		createBranch := !git.BranchExists(repoRoot, branch)
 
 		if err := git.WorktreeAdd(repoRoot, wtPath, branch, createBranch); err != nil {

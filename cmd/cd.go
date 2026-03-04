@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/sergidb/wt/internal/config"
 	"github.com/sergidb/wt/internal/git"
 	"github.com/sergidb/wt/internal/shell"
 	"github.com/sergidb/wt/internal/worktree"
@@ -21,7 +22,8 @@ var cdCmd = &cobra.Command{
 			return err
 		}
 
-		wts, err := worktree.List(repoRoot)
+		cfg := config.LoadOrEmpty(repoRoot)
+		wts, err := worktree.List(repoRoot, cfg.GetWorktreesDir(repoRoot))
 		if err != nil {
 			return err
 		}

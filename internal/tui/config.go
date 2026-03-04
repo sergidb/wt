@@ -18,6 +18,7 @@ const (
 	cfgScreenList configScreen = iota
 	cfgScreenEdit
 	cfgScreenDelete
+	cfgScreenWorktreesDir
 )
 
 var availableColors = []string{"green", "cyan", "yellow", "magenta", "blue", "red", "white"}
@@ -62,6 +63,9 @@ type configModel struct {
 	// Color picker
 	colorIdx int
 
+	// Worktrees dir edit
+	wtDirInput textinput.Model
+
 	// Status message
 	statusMsg string
 
@@ -77,6 +81,7 @@ func newConfigModel(repoRoot string) configModel {
 	}
 	m.refreshNames()
 	m.initInputs()
+	m.initWtDirInput()
 	return m
 }
 
@@ -110,6 +115,14 @@ func (m *configModel) initInputs() {
 	colorInput.Placeholder = "auto"
 	colorInput.CharLimit = 20
 	m.inputs[fieldColor] = colorInput
+}
+
+func (m *configModel) initWtDirInput() {
+	wtDir := textinput.New()
+	wtDir.Placeholder = ".worktrees"
+	wtDir.CharLimit = 200
+	wtDir.SetValue(m.cfg.WorktreesDir)
+	m.wtDirInput = wtDir
 }
 
 func (m *configModel) focusInput(idx int) {
@@ -226,6 +239,8 @@ func (m configModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateEdit(msg)
 		case cfgScreenDelete:
 			return m.updateDelete(msg)
+		case cfgScreenWorktreesDir:
+			return m.updateWorktreesDir(msg)
 		}
 	}
 
@@ -264,6 +279,12 @@ func (m configModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.deleteIdx = m.cursor
 			m.deleteCursor = 1 // default to "No"
 		}
+	case "w":
+		m.screen = cfgScreenWorktreesDir
+		m.statusMsg = ""
+		m.wtDirInput.SetValue(m.cfg.WorktreesDir)
+		m.wtDirInput.Focus()
+		return m, textinput.Blink
 	}
 	return m, nil
 }
@@ -360,6 +381,32 @@ func (m configModel) updateDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m configModel) updateWorktreesDir(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		m.quitting = true
+		return m, tea.Quit
+	case "esc":
+		m.screen = cfgScreenList
+		m.wtDirInput.Blur()
+		return m, nil
+	case "enter":
+		m.cfg.WorktreesDir = strings.TrimSpace(m.wtDirInput.Value())
+		if err := config.Save(m.repoRoot, m.cfg); err != nil {
+			m.statusMsg = errorStyle.Render("  Error: " + err.Error())
+		} else {
+			m.statusMsg = successStyle.Render("  Saved!")
+		}
+		m.wtDirInput.Blur()
+		m.screen = cfgScreenList
+		return m, nil
+	}
+
+	var cmd tea.Cmd
+	m.wtDirInput, cmd = m.wtDirInput.Update(msg)
+	return m, cmd
+}
+
 func (m configModel) View() string {
 	if m.quitting {
 		return ""
@@ -372,6 +419,8 @@ func (m configModel) View() string {
 		return m.viewEdit()
 	case cfgScreenDelete:
 		return m.viewDelete()
+	case cfgScreenWorktreesDir:
+		return m.viewWorktreesDir()
 	}
 	return ""
 }
@@ -380,9 +429,23 @@ func (m configModel) viewList() string {
 	var b strings.Builder
 
 	// Header
-	b.WriteString(renderHeader("Config", "Services"))
+	b.WriteString(renderHeader("Config"))
 	b.WriteString(renderSeparator(50))
 	b.WriteString("\n")
+
+	// Worktrees directory setting
+	wtDirDisplay := m.cfg.WorktreesDir
+	if wtDirDisplay == "" {
+		wtDirDisplay = dimStyle.Render(".worktrees (default)")
+	} else {
+		wtDirDisplay = secondaryStyle.Render(wtDirDisplay)
+	}
+	b.WriteString(fmt.Sprintf("   %s  %s\n", labelStyle.Render("worktrees_dir:"), wtDirDisplay))
+	b.WriteString("\n")
+
+	// Services section
+	b.WriteString(labelStyle.Render("   Services"))
+	b.WriteString("\n\n")
 
 	if len(m.serviceNames) == 0 {
 		b.WriteString(dimStyle.Render("   No services configured yet. Press 'a' to add one."))
@@ -442,7 +505,7 @@ func (m configModel) viewList() string {
 
 	// Separator + Help
 	b.WriteString(renderSeparator(50))
-	b.WriteString(renderHelp("a add  e/enter edit  d delete  q back"))
+	b.WriteString(renderHelp("a add  e/enter edit  d delete  w worktrees dir  q back"))
 
 	return b.String()
 }
@@ -561,6 +624,28 @@ func (m configModel) viewDelete() string {
 	b.WriteString("\n")
 	b.WriteString(renderSeparator(50))
 	b.WriteString(renderHelp("↑↓ select  enter confirm  esc cancel"))
+
+	return b.String()
+}
+
+func (m configModel) viewWorktreesDir() string {
+	var b strings.Builder
+
+	b.WriteString(renderHeader("Config", "Worktrees Directory"))
+	b.WriteString(renderSeparator(50))
+	b.WriteString("\n")
+
+	b.WriteString(fmt.Sprintf("   %s\n", labelStyle.Render("Path:")))
+	b.WriteString(fmt.Sprintf("     %s\n\n", m.wtDirInput.View()))
+
+	b.WriteString(dimStyle.Render("   Relative to repo root, or absolute path."))
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("   Leave empty for default (.worktrees)."))
+	b.WriteString("\n")
+
+	b.WriteString("\n")
+	b.WriteString(renderSeparator(50))
+	b.WriteString(renderHelp("enter save  esc cancel"))
 
 	return b.String()
 }
