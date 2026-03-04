@@ -13,16 +13,16 @@ import (
 type Source int
 
 const (
-	SourceGit    Source = iota // Standard git worktree
-	SourceClaude              // Found in .claude/worktrees/
+	SourceGit     Source = iota // Standard git worktree
+	SourceManaged              // Found in managed worktrees directory
 )
 
 func (s Source) String() string {
 	switch s {
 	case SourceGit:
 		return "git"
-	case SourceClaude:
-		return "claude"
+	case SourceManaged:
+		return "managed"
 	default:
 		return "unknown"
 	}
@@ -38,18 +38,16 @@ type Worktree struct {
 	ModTime time.Time
 }
 
-// ClaudeWorktreesDir returns the path to the .claude/worktrees directory.
-func ClaudeWorktreesDir(repoRoot string) string {
-	return filepath.Join(repoRoot, ".claude", "worktrees")
-}
-
-// List returns all discovered worktrees, merging git worktrees and .claude/worktrees.
-// It accepts a git.Ops to abstract git commands for testability.
-func List(ops git.Ops, repoRoot string) ([]Worktree, error) {
+// List returns all discovered worktrees, merging git worktrees and the managed worktrees directory.
+// worktreesDir is the resolved absolute path to the managed worktrees directory.
+func List(repoRoot, worktreesDir string) ([]Worktree, error) {
 	seen := make(map[string]*Worktree) // keyed by absolute path
 
+	absWorktreesDir, _ := filepath.Abs(worktreesDir)
+	absWorktreesDir = filepath.Clean(absWorktreesDir)
+
 	// 1. Parse git worktree list
-	rawList, err := ops.WorktreeList(repoRoot)
+	rawList, err := git.WorktreeList(repoRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -66,8 +64,8 @@ func List(ops git.Ops, repoRoot string) ([]Worktree, error) {
 		}
 
 		source := SourceGit
-		if strings.Contains(absPath, filepath.Join(".claude", "worktrees")) {
-			source = SourceClaude
+		if strings.HasPrefix(absPath, absWorktreesDir+string(filepath.Separator)) {
+			source = SourceManaged
 		}
 
 		modTime := dirModTime(absPath)
@@ -82,16 +80,15 @@ func List(ops git.Ops, repoRoot string) ([]Worktree, error) {
 		}
 	}
 
-	// 2. Scan .claude/worktrees/ for any not already discovered
-	claudeDir := ClaudeWorktreesDir(repoRoot)
-	entries, err := os.ReadDir(claudeDir)
+	// 2. Scan managed worktrees dir for any not already discovered
+	entries, err := os.ReadDir(absWorktreesDir)
 	if err == nil { // directory might not exist
 		for _, entry := range entries {
 			if !entry.IsDir() {
 				continue
 			}
 
-			absPath := filepath.Join(claudeDir, entry.Name())
+			absPath := filepath.Join(absWorktreesDir, entry.Name())
 			absPath = filepath.Clean(absPath)
 
 			// Skip if already found via git worktree list
@@ -111,7 +108,7 @@ func List(ops git.Ops, repoRoot string) ([]Worktree, error) {
 				Name:    entry.Name(),
 				Path:    absPath,
 				Branch:  "", // Unknown without git metadata
-				Source:  SourceClaude,
+				Source:  SourceManaged,
 				IsMain:  false,
 				ModTime: modTime,
 			}

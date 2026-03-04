@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/sergidb/wt/internal/git"
+	"github.com/sergidb/wt/internal/config"
 	"github.com/sergidb/wt/internal/worktree"
 )
 
@@ -172,8 +172,8 @@ func (m model) viewList() string {
 		var badge string
 		if wt.IsMain {
 			badge = badgeMainStyle.Render(" ● main")
-		} else if wt.Source == worktree.SourceClaude {
-			badge = badgeClaudeStyle.Render(" ◆ claude")
+		} else if wt.Source == worktree.SourceManaged {
+			badge = badgeManagedStyle.Render(" ◆ managed")
 		} else {
 			badge = badgeGitStyle.Render(" ○ git")
 		}
@@ -217,8 +217,8 @@ func (m model) viewActions() string {
 	var badge string
 	if wt.IsMain {
 		badge = badgeMainStyle.Render("● main")
-	} else if wt.Source == worktree.SourceClaude {
-		badge = badgeClaudeStyle.Render("◆ claude")
+	} else if wt.Source == worktree.SourceManaged {
+		badge = badgeManagedStyle.Render("◆ managed")
 	} else {
 		badge = badgeGitStyle.Render("○ git")
 	}
@@ -272,7 +272,8 @@ func (m model) relativePath(absPath string) string {
 
 // Run launches the interactive TUI and returns a typed Result.
 func Run(repoRoot string) (Result, error) {
-	wts, err := worktree.List(git.ExecOps{}, repoRoot)
+	cfg := config.LoadOrEmpty(repoRoot)
+	wts, err := worktree.List(repoRoot, cfg.GetWorktreesDir(repoRoot))
 	if err != nil {
 		return Result{}, err
 	}

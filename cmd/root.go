@@ -16,7 +16,7 @@ import (
 var rootCmd = &cobra.Command{
 	Use:   "wt",
 	Short: "Git worktree manager with interactive TUI",
-	Long:  "A tool to navigate and manage git worktrees, optimized for Claude Code workflows.",
+	Long:  "A tool to navigate and manage git worktrees, optimized for AI-assisted development workflows.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		repoRoot, err := git.RepoRoot()
 		if err != nil {
@@ -63,7 +63,8 @@ func Execute() {
 }
 
 func findWorktreePath(repoRoot, name string) string {
-	wts, err := worktree.List(git.ExecOps{}, repoRoot)
+	cfg := config.LoadOrEmpty(repoRoot)
+	wts, err := worktree.List(repoRoot, cfg.GetWorktreesDir(repoRoot))
 	if err != nil {
 		return name
 	}

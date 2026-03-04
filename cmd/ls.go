@@ -5,6 +5,7 @@ import (
 	"os"
 	"text/tabwriter"
 
+	"github.com/sergidb/wt/internal/config"
 	"github.com/sergidb/wt/internal/git"
 	"github.com/sergidb/wt/internal/worktree"
 	"github.com/spf13/cobra"
@@ -23,7 +24,8 @@ var lsCmd = &cobra.Command{
 			return err
 		}
 
-		wts, err := worktree.List(git.ExecOps{}, repoRoot)
+		cfg := config.LoadOrEmpty(repoRoot)
+		wts, err := worktree.List(repoRoot, cfg.GetWorktreesDir(repoRoot))
 		if err != nil {
 			return err
 		}

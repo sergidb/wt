@@ -20,7 +20,28 @@ type Service struct {
 
 // Config is the root configuration from .wt.yaml.
 type Config struct {
-	Services map[string]Service `yaml:"services"`
+	WorktreesDir string             `yaml:"worktrees_dir,omitempty"`
+	Services     map[string]Service `yaml:"services"`
+}
+
+// GetWorktreesDir returns the resolved worktrees directory path.
+// If WorktreesDir is empty, it checks for a legacy .claude/worktrees/ dir
+// and falls back to .worktrees/.
+func (c *Config) GetWorktreesDir(repoRoot string) string {
+	if c.WorktreesDir != "" {
+		if filepath.IsAbs(c.WorktreesDir) {
+			return c.WorktreesDir
+		}
+		return filepath.Join(repoRoot, c.WorktreesDir)
+	}
+
+	// Legacy fallback: if .claude/worktrees/ exists, use it
+	legacyDir := filepath.Join(repoRoot, ".claude", "worktrees")
+	if info, err := os.Stat(legacyDir); err == nil && info.IsDir() {
+		return legacyDir
+	}
+
+	return filepath.Join(repoRoot, ".worktrees")
 }
 
 // Load reads and parses .wt.yaml from the given repo root.
