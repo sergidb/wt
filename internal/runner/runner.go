@@ -86,7 +86,7 @@ func Run(services map[string]config.Service, worktreePath string) error {
 
 		prefix := formatPrefix(name, maxLen, color)
 
-		fmt.Printf("%s Starting %s...\n", prefix, svc.Cmd)
+		fmt.Fprintf(os.Stderr,"%s Starting %s...\n", prefix, svc.Cmd)
 
 		if err := cmd.Start(); err != nil {
 			return fmt.Errorf("starting %s: %w", name, err)
@@ -115,7 +115,7 @@ func Run(services map[string]config.Service, worktreePath string) error {
 	case <-doneCh:
 		// All pipes closed, wait for processes
 	case sig := <-sigCh:
-		fmt.Printf("\n%sReceived %s, shutting down...%s\n", colorCodes["yellow"], sig, colorReset)
+		fmt.Fprintf(os.Stderr,"\n%sReceived %s, shutting down...%s\n", colorCodes["yellow"], sig, colorReset)
 		shutdown(running)
 	}
 
@@ -168,7 +168,7 @@ func streamLines(wg *sync.WaitGroup, r io.Reader, prefix string) {
 	defer wg.Done()
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
-		fmt.Printf("%s %s\n", prefix, scanner.Text())
+		fmt.Fprintf(os.Stderr,"%s %s\n", prefix, scanner.Text())
 	}
 }
 

@@ -3,9 +3,19 @@
 # Requires wt-bin to be in PATH.
 
 wt() {
-  local output exit_code
+  # Commands that may return a cd path need stdout captured.
+  # Everything else runs directly (pass-through).
+  local cmd="${1:-}"
 
-  # Capture stdout (result/cd signal), stderr goes to terminal (TUI rendering).
+  case "$cmd" in
+    run|config|ls|new|rm|prune|help|--help|-h)
+      command wt-bin "$@"
+      return $?
+      ;;
+  esac
+
+  # For cd, home, and interactive mode (no args): capture stdout
+  local output exit_code
   output=$(command wt-bin "$@")
   exit_code=$?
 
