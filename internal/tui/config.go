@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/sergidb/wt/internal/config"
 )
 
@@ -20,6 +21,17 @@ const (
 )
 
 var availableColors = []string{"green", "cyan", "yellow", "magenta", "blue", "red", "white"}
+
+// Color codes for preview blocks
+var colorPreview = map[string]lipgloss.Color{
+	"green":   lipgloss.Color("78"),
+	"cyan":    lipgloss.Color("39"),
+	"yellow":  lipgloss.Color("214"),
+	"magenta": lipgloss.Color("213"),
+	"blue":    lipgloss.Color("69"),
+	"red":     lipgloss.Color("196"),
+	"white":   lipgloss.Color("255"),
+}
 
 // Form field indices
 const (
@@ -277,10 +289,10 @@ func (m configModel) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if nextIdx >= fieldCount {
 			// Save
 			if err := m.saveService(); err != nil {
-				m.statusMsg = errorStyle.Render("Error: " + err.Error())
+				m.statusMsg = errorStyle.Render("  Error: " + err.Error())
 				return m, nil
 			}
-			m.statusMsg = successStyle.Render("Saved!")
+			m.statusMsg = successStyle.Render("  Saved!")
 			m.screen = cfgScreenList
 			return m, nil
 		}
@@ -338,9 +350,9 @@ func (m configModel) updateDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.deleteCursor == 0 {
 			// Yes - delete
 			if err := m.deleteService(); err != nil {
-				m.statusMsg = errorStyle.Render("Error: " + err.Error())
+				m.statusMsg = errorStyle.Render("  Error: " + err.Error())
 			} else {
-				m.statusMsg = successStyle.Render("Deleted.")
+				m.statusMsg = successStyle.Render("  Deleted.")
 			}
 		}
 		m.screen = cfgScreenList
@@ -367,11 +379,13 @@ func (m configModel) View() string {
 func (m configModel) viewList() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render("  Services (.wt.yaml)"))
+	// Header
+	b.WriteString(renderHeader("Config", "Services"))
+	b.WriteString(renderSeparator(50))
 	b.WriteString("\n")
 
 	if len(m.serviceNames) == 0 {
-		b.WriteString(dimStyle.Render("  No services configured yet."))
+		b.WriteString(dimStyle.Render("   No services configured yet. Press 'a' to add one."))
 		b.WriteString("\n")
 	} else {
 		// Find max name length for alignment
@@ -384,28 +398,51 @@ func (m configModel) viewList() string {
 
 		for i, name := range m.serviceNames {
 			svc := m.cfg.Services[name]
+			isSelected := i == m.cursor
 
-			cursor := "  "
-			if i == m.cursor {
-				cursor = cursorStyle.Render("> ")
+			cursor := "   "
+			if isSelected {
+				cursor = cursorStyle.Render(" ▸ ")
 			}
 
 			displayName := name + strings.Repeat(" ", maxLen-len(name))
-			if i == m.cursor {
+			if isSelected {
 				displayName = selectedStyle.Render(displayName)
+			} else {
+				displayName = secondaryStyle.Render(displayName)
 			}
 
-			cmd := dimStyle.Render("  " + svc.Cmd)
+			// Color indicator
+			colorDot := ""
+			if svc.Color != "" {
+				if c, ok := colorPreview[svc.Color]; ok {
+					colorDot = lipgloss.NewStyle().Foreground(c).Render("●") + " "
+				}
+			}
 
-			b.WriteString(fmt.Sprintf("%s%s%s\n", cursor, displayName, cmd))
+			cmd := dimStyle.Render(svc.Cmd)
+
+			b.WriteString(fmt.Sprintf("%s%s%s  %s\n", cursor, colorDot, displayName, cmd))
+
+			// Show dir if not default
+			if isSelected && svc.Dir != "" && svc.Dir != "." {
+				b.WriteString(dimStyle.Render(fmt.Sprintf("     dir: %s", svc.Dir)) + "\n")
+			}
 		}
 	}
 
+	// Status
 	if m.statusMsg != "" {
-		b.WriteString("\n  " + m.statusMsg + "\n")
+		b.WriteString("\n" + m.statusMsg + "\n")
 	}
 
-	b.WriteString(helpStyle.Render("a add • e/enter edit • d delete • q back"))
+	// Status bar
+	count := fmt.Sprintf("%d services", len(m.serviceNames))
+	b.WriteString(renderStatusBar(count, ""))
+
+	// Separator + Help
+	b.WriteString(renderSeparator(50))
+	b.WriteString(renderHelp("a add  e/enter edit  d delete  q back"))
 
 	return b.String()
 }
@@ -413,11 +450,13 @@ func (m configModel) viewList() string {
 func (m configModel) viewEdit() string {
 	var b strings.Builder
 
+	// Header
 	title := "Edit Service"
 	if m.isNew {
 		title = "Add Service"
 	}
-	b.WriteString(titleStyle.Render("  " + title))
+	b.WriteString(renderHeader("Config", title))
+	b.WriteString(renderSeparator(50))
 	b.WriteString("\n")
 
 	fields := []struct {
@@ -432,31 +471,52 @@ func (m configModel) viewEdit() string {
 	}
 
 	for _, f := range fields {
-		// Skip name field when editing
+		isActive := f.idx == m.inputIdx
+
+		// Skip name field when editing (show as read-only header)
 		if !m.isNew && f.idx == fieldName {
-			b.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render(f.label+":"), m.inputs[f.idx].Value()))
+			b.WriteString(fmt.Sprintf("   %s %s\n\n", labelStyle.Render(f.label+":"), selectedStyle.Render(m.inputs[f.idx].Value())))
 			continue
 		}
 
-		active := ""
-		if f.idx == m.inputIdx {
-			active = " "
+		// Active indicator
+		indicator := fieldInactiveStyle.String()
+		if isActive {
+			indicator = fieldActiveStyle.String()
 		}
 
+		// Label + hint
+		label := labelStyle.Render(f.label + ":")
 		hint := ""
 		if f.hint != "" {
 			hint = dimStyle.Render(" (" + f.hint + ")")
 		}
 
-		b.WriteString(fmt.Sprintf("  %s%s%s\n", active, labelStyle.Render(f.label+":"), hint))
-		b.WriteString(fmt.Sprintf("  %s\n", m.inputs[f.idx].View()))
+		b.WriteString(fmt.Sprintf(" %s%s%s\n", indicator, label, hint))
+
+		// Input field
+		b.WriteString(fmt.Sprintf("     %s\n", m.inputs[f.idx].View()))
+
+		// Color preview
+		if f.idx == fieldColor && m.inputs[fieldColor].Value() != "" {
+			colorName := m.inputs[fieldColor].Value()
+			if c, ok := colorPreview[colorName]; ok {
+				preview := lipgloss.NewStyle().Foreground(c).Render("████")
+				b.WriteString(fmt.Sprintf("     %s %s\n", preview, dimStyle.Render(colorName)))
+			}
+		}
+
+		b.WriteString("\n")
 	}
 
+	// Status
 	if m.statusMsg != "" {
-		b.WriteString("\n  " + m.statusMsg + "\n")
+		b.WriteString(m.statusMsg + "\n")
 	}
 
-	b.WriteString(helpStyle.Render("tab/enter next • shift+tab prev • esc cancel"))
+	// Separator + Help
+	b.WriteString(renderSeparator(50))
+	b.WriteString(renderHelp("tab/enter next  shift+tab prev  esc cancel"))
 
 	return b.String()
 }
@@ -465,25 +525,42 @@ func (m configModel) viewDelete() string {
 	var b strings.Builder
 
 	name := m.serviceNames[m.deleteIdx]
-	b.WriteString(titleStyle.Render(fmt.Sprintf("  Delete service '%s'?", name)))
+
+	// Header
+	b.WriteString(renderHeader("Config", "Delete"))
+	b.WriteString(renderSeparator(50))
 	b.WriteString("\n")
 
-	options := []string{"Yes", "No"}
+	b.WriteString(warningStyle.Render(fmt.Sprintf("   Delete service '%s'?", name)))
+	b.WriteString("\n\n")
+
+	options := []string{"Yes, delete", "No, cancel"}
 	for i, opt := range options {
-		cursor := "  "
-		if i == m.deleteCursor {
-			cursor = cursorStyle.Render("> ")
+		isSelected := i == m.deleteCursor
+
+		cursor := "   "
+		if isSelected {
+			cursor = cursorStyle.Render(" ▸ ")
 		}
 
 		label := opt
-		if i == m.deleteCursor {
-			label = selectedStyle.Render(label)
+		if isSelected {
+			if i == 0 {
+				label = errorStyle.Render(opt)
+			} else {
+				label = selectedStyle.Render(opt)
+			}
+		} else {
+			label = secondaryStyle.Render(opt)
 		}
 
 		b.WriteString(fmt.Sprintf("%s%s\n", cursor, label))
 	}
 
-	b.WriteString(helpStyle.Render("↑/↓ select • enter confirm • esc cancel"))
+	// Separator + Help
+	b.WriteString("\n")
+	b.WriteString(renderSeparator(50))
+	b.WriteString(renderHelp("↑↓ select  enter confirm  esc cancel"))
 
 	return b.String()
 }

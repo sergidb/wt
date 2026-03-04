@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -16,6 +17,15 @@ const (
 	screenList screen = iota
 	screenActions
 )
+
+// Action descriptions for the actions menu
+var actionDescs = map[string]string{
+	"cd":     "Navigate to this worktree",
+	"run":    "Start configured services",
+	"info":   "Show worktree details",
+	"remove": "Delete this worktree",
+	"back":   "Return to worktree list",
+}
 
 type model struct {
 	worktrees []worktree.Worktree
@@ -139,43 +149,63 @@ func (m model) View() string {
 func (m model) viewList() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render("  Worktrees"))
+	// Header
+	b.WriteString(renderHeader("Worktrees"))
+	b.WriteString(renderSeparator(50))
 	b.WriteString("\n")
 
 	for i, wt := range m.worktrees {
-		cursor := "  "
-		if i == m.cursor {
-			cursor = cursorStyle.Render("> ")
+		isSelected := i == m.cursor
+
+		// Cursor
+		cursor := "   "
+		if isSelected {
+			cursor = cursorStyle.Render(" ▸ ")
 		}
 
+		// Name
 		name := wt.Name
-		if i == m.cursor {
+		if isSelected {
 			name = selectedStyle.Render(name)
+		} else {
+			name = secondaryStyle.Render(name)
 		}
 
+		// Badge
 		var badge string
 		if wt.IsMain {
-			badge = mainBadgeStyle.Render(" [main]")
+			badge = badgeMainStyle.Render(" ● main")
 		} else if wt.Source == worktree.SourceClaude {
-			badge = sourceClaudeStyle.Render(" [claude]")
+			badge = badgeClaudeStyle.Render(" ◆ claude")
 		} else {
-			badge = sourceGitStyle.Render(" [git]")
+			badge = badgeGitStyle.Render(" ○ git")
 		}
 
+		// Branch (if different from name)
 		branch := ""
 		if wt.Branch != "" && wt.Branch != wt.Name {
-			branch = dimStyle.Render(" (" + wt.Branch + ")")
+			branch = dimStyle.Render("  " + wt.Branch)
 		}
 
-		path := dimStyle.Render("  " + wt.Path)
-
 		b.WriteString(fmt.Sprintf("%s%s%s%s\n", cursor, name, badge, branch))
-		if i == m.cursor {
-			b.WriteString(path + "\n")
+
+		// Path (always shown, relative to repo root)
+		relPath := m.relativePath(wt.Path)
+		if isSelected {
+			b.WriteString(dimStyle.Render("     "+relPath) + "\n")
+		} else {
+			b.WriteString(dimStyle.Render("     "+relPath) + "\n")
 		}
 	}
 
-	b.WriteString(helpStyle.Render("↑/↓ navigate • enter select • d delete • c config • q quit"))
+	// Status bar
+	count := fmt.Sprintf("%d worktrees", len(m.worktrees))
+	pos := fmt.Sprintf("%d/%d", m.cursor+1, len(m.worktrees))
+	b.WriteString(renderStatusBar(count, dimStyle.Render(pos)))
+
+	// Separator + Help
+	b.WriteString(renderSeparator(50))
+	b.WriteString(renderHelp("↑↓ navigate  enter select  d delete  c config  q quit"))
 
 	return b.String()
 }
@@ -184,35 +214,70 @@ func (m model) viewActions() string {
 	var b strings.Builder
 
 	wt := m.worktrees[m.cursor]
-	b.WriteString(titleStyle.Render("  " + wt.Name))
+
+	// Header with breadcrumb
+	b.WriteString(renderHeader(wt.Name, "Actions"))
+	b.WriteString(renderSeparator(50))
 	b.WriteString("\n")
 
+	// Worktree info summary
+	var badge string
+	if wt.IsMain {
+		badge = badgeMainStyle.Render("● main")
+	} else if wt.Source == worktree.SourceClaude {
+		badge = badgeClaudeStyle.Render("◆ claude")
+	} else {
+		badge = badgeGitStyle.Render("○ git")
+	}
+	b.WriteString(fmt.Sprintf("   %s  %s\n", badge, dimStyle.Render(m.relativePath(wt.Path))))
+	b.WriteString("\n")
+
+	// Actions with descriptions
 	for i, action := range m.actions {
-		cursor := "  "
-		if i == m.actionIdx {
-			cursor = cursorStyle.Render("> ")
+		isSelected := i == m.actionIdx
+
+		cursor := "   "
+		if isSelected {
+			cursor = cursorStyle.Render(" ▸ ")
 		}
 
-		label := action
-		if i == m.actionIdx {
-			label = selectedStyle.Render(label)
+		name := actionNameStyle.Render(action)
+		desc := actionDescStyle.Render(actionDescs[action])
+
+		if isSelected {
+			name = selectedStyle.Render(actionNameStyle.Render(action))
+			desc = secondaryStyle.Render(actionDescs[action])
 		}
 
 		// Disable remove for main
 		if action == "remove" && wt.IsMain {
-			label = dimStyle.Render(action + " (main)")
+			name = dimStyle.Render(actionNameStyle.Render(action))
+			desc = dimStyle.Render("(main worktree)")
 		}
 
-		b.WriteString(fmt.Sprintf("%s%s\n", cursor, label))
+		b.WriteString(fmt.Sprintf("%s%s  %s\n", cursor, name, desc))
 	}
 
-	b.WriteString(helpStyle.Render("↑/↓ navigate • enter select • esc back • q quit"))
+	// Separator + Help
+	b.WriteString("\n")
+	b.WriteString(renderSeparator(50))
+	b.WriteString(renderHelp("↑↓ navigate  enter select  esc back  q quit"))
 
 	return b.String()
 }
 
+func (m model) relativePath(absPath string) string {
+	rel, err := filepath.Rel(m.repoRoot, absPath)
+	if err != nil {
+		return absPath
+	}
+	if rel == "." {
+		return "./"
+	}
+	return rel
+}
+
 // Run launches the interactive TUI and returns the result string.
-// The result may be a cd-prefix path, an action command, or empty if quit.
 func Run(repoRoot string) (string, error) {
 	wts, err := worktree.List(repoRoot)
 	if err != nil {
