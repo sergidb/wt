@@ -107,7 +107,7 @@ func TestSourceString(t *testing.T) {
 		want   string
 	}{
 		{SourceGit, "git"},
-		{SourceClaude, "claude"},
+		{SourceManaged, "managed"},
 		{Source(99), "unknown"},
 	}
 
@@ -118,34 +118,25 @@ func TestSourceString(t *testing.T) {
 	}
 }
 
-func TestClaudeWorktreesDir(t *testing.T) {
-	got := ClaudeWorktreesDir("/home/user/repo")
-	want := filepath.Join("/home/user/repo", ".claude", "worktrees")
-	if got != want {
-		t.Errorf("ClaudeWorktreesDir() = %q, want %q", got, want)
+// mockGitWorktreeList replaces gitWorktreeListFunc for the duration of a test.
+func mockGitWorktreeList(t *testing.T, worktrees []git.RawWorktree, err error) {
+	t.Helper()
+	orig := gitWorktreeListFunc
+	gitWorktreeListFunc = func(repoRoot string) ([]git.RawWorktree, error) {
+		return worktrees, err
 	}
-}
-
-// mockOps implements git.Ops for testing.
-type mockOps struct {
-	worktrees []git.RawWorktree
-	err       error
-}
-
-func (m *mockOps) WorktreeList(repoRoot string) ([]git.RawWorktree, error) {
-	return m.worktrees, m.err
+	t.Cleanup(func() { gitWorktreeListFunc = orig })
 }
 
 func TestList(t *testing.T) {
 	t.Run("git worktrees only", func(t *testing.T) {
 		tmp := t.TempDir()
-		ops := &mockOps{
-			worktrees: []git.RawWorktree{
-				{Path: tmp, HEAD: "abc123", Branch: "refs/heads/main"},
-			},
-		}
+		mockGitWorktreeList(t, []git.RawWorktree{
+			{Path: tmp, HEAD: "abc123", Branch: "refs/heads/main"},
+		}, nil)
 
-		wts, err := List(ops, tmp)
+		worktreesDir := filepath.Join(tmp, ".managed", "worktrees")
+		wts, err := List(tmp, worktreesDir)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -166,26 +157,25 @@ func TestList(t *testing.T) {
 		}
 	})
 
-	t.Run("claude worktrees discovered from filesystem", func(t *testing.T) {
+	t.Run("managed worktrees discovered from filesystem", func(t *testing.T) {
 		tmp := t.TempDir()
 
-		// Create a .claude/worktrees/feat-x directory with a .git file
-		claudeWT := filepath.Join(tmp, ".claude", "worktrees", "feat-x")
-		if err := os.MkdirAll(claudeWT, 0755); err != nil {
+		// Create a managed worktrees directory with feat-x
+		worktreesDir := filepath.Join(tmp, ".managed", "worktrees")
+		managedWT := filepath.Join(worktreesDir, "feat-x")
+		if err := os.MkdirAll(managedWT, 0755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(claudeWT, ".git"), []byte("gitdir: ..."), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(managedWT, ".git"), []byte("gitdir: ..."), 0644); err != nil {
 			t.Fatal(err)
 		}
 
 		// Git only returns the main worktree
-		ops := &mockOps{
-			worktrees: []git.RawWorktree{
-				{Path: tmp, HEAD: "abc", Branch: "refs/heads/main"},
-			},
-		}
+		mockGitWorktreeList(t, []git.RawWorktree{
+			{Path: tmp, HEAD: "abc", Branch: "refs/heads/main"},
+		}, nil)
 
-		wts, err := List(ops, tmp)
+		wts, err := List(tmp, worktreesDir)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -198,39 +188,37 @@ func TestList(t *testing.T) {
 			t.Errorf("first worktree Name = %q, want %q", wts[0].Name, "main")
 		}
 
-		// feat-x should be discovered as SourceClaude
+		// feat-x should be discovered as SourceManaged
 		if wts[1].Name != "feat-x" {
 			t.Errorf("second worktree Name = %q, want %q", wts[1].Name, "feat-x")
 		}
-		if wts[1].Source != SourceClaude {
-			t.Errorf("Source = %v, want SourceClaude", wts[1].Source)
+		if wts[1].Source != SourceManaged {
+			t.Errorf("Source = %v, want SourceManaged", wts[1].Source)
 		}
 		if wts[1].Branch != "" {
 			t.Errorf("Branch = %q, want empty (unknown)", wts[1].Branch)
 		}
 	})
 
-	t.Run("duplicate worktree seen by git and claude dir", func(t *testing.T) {
+	t.Run("duplicate worktree seen by git and managed dir", func(t *testing.T) {
 		tmp := t.TempDir()
 
-		// Create .claude/worktrees/feat-y with .git file
-		claudeWT := filepath.Join(tmp, ".claude", "worktrees", "feat-y")
-		if err := os.MkdirAll(claudeWT, 0755); err != nil {
+		worktreesDir := filepath.Join(tmp, ".managed", "worktrees")
+		managedWT := filepath.Join(worktreesDir, "feat-y")
+		if err := os.MkdirAll(managedWT, 0755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(claudeWT, ".git"), []byte("gitdir: ..."), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(managedWT, ".git"), []byte("gitdir: ..."), 0644); err != nil {
 			t.Fatal(err)
 		}
 
 		// Git already reports this worktree
-		ops := &mockOps{
-			worktrees: []git.RawWorktree{
-				{Path: tmp, HEAD: "abc", Branch: "refs/heads/main"},
-				{Path: claudeWT, HEAD: "def", Branch: "refs/heads/feat-y"},
-			},
-		}
+		mockGitWorktreeList(t, []git.RawWorktree{
+			{Path: tmp, HEAD: "abc", Branch: "refs/heads/main"},
+			{Path: managedWT, HEAD: "def", Branch: "refs/heads/feat-y"},
+		}, nil)
 
-		wts, err := List(ops, tmp)
+		wts, err := List(tmp, worktreesDir)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -240,22 +228,20 @@ func TestList(t *testing.T) {
 		}
 	})
 
-	t.Run("claude dir without .git file is skipped", func(t *testing.T) {
+	t.Run("managed dir without .git file is skipped", func(t *testing.T) {
 		tmp := t.TempDir()
 
-		// Create a directory in .claude/worktrees/ but without .git
-		claudeWT := filepath.Join(tmp, ".claude", "worktrees", "broken")
-		if err := os.MkdirAll(claudeWT, 0755); err != nil {
+		worktreesDir := filepath.Join(tmp, ".managed", "worktrees")
+		managedWT := filepath.Join(worktreesDir, "broken")
+		if err := os.MkdirAll(managedWT, 0755); err != nil {
 			t.Fatal(err)
 		}
 
-		ops := &mockOps{
-			worktrees: []git.RawWorktree{
-				{Path: tmp, HEAD: "abc", Branch: "refs/heads/main"},
-			},
-		}
+		mockGitWorktreeList(t, []git.RawWorktree{
+			{Path: tmp, HEAD: "abc", Branch: "refs/heads/main"},
+		}, nil)
 
-		wts, err := List(ops, tmp)
+		wts, err := List(tmp, worktreesDir)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -264,15 +250,14 @@ func TestList(t *testing.T) {
 		}
 	})
 
-	t.Run("no claude worktrees dir", func(t *testing.T) {
+	t.Run("no managed worktrees dir", func(t *testing.T) {
 		tmp := t.TempDir()
-		ops := &mockOps{
-			worktrees: []git.RawWorktree{
-				{Path: tmp, HEAD: "abc", Branch: "refs/heads/main"},
-			},
-		}
+		mockGitWorktreeList(t, []git.RawWorktree{
+			{Path: tmp, HEAD: "abc", Branch: "refs/heads/main"},
+		}, nil)
 
-		wts, err := List(ops, tmp)
+		worktreesDir := filepath.Join(tmp, ".managed", "worktrees")
+		wts, err := List(tmp, worktreesDir)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -282,30 +267,29 @@ func TestList(t *testing.T) {
 	})
 
 	t.Run("git ops error", func(t *testing.T) {
-		ops := &mockOps{err: errors.New("git failed")}
-		_, err := List(ops, "/nonexistent")
+		mockGitWorktreeList(t, nil, errors.New("git failed"))
+		_, err := List("/nonexistent", "/nonexistent/.managed/worktrees")
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
 	})
 
-	t.Run("worktree in claude path detected as SourceClaude via git", func(t *testing.T) {
+	t.Run("worktree in managed path detected as SourceManaged via git", func(t *testing.T) {
 		tmp := t.TempDir()
 
-		claudeWT := filepath.Join(tmp, ".claude", "worktrees", "feat-z")
-		if err := os.MkdirAll(claudeWT, 0755); err != nil {
+		worktreesDir := filepath.Join(tmp, ".managed", "worktrees")
+		managedWT := filepath.Join(worktreesDir, "feat-z")
+		if err := os.MkdirAll(managedWT, 0755); err != nil {
 			t.Fatal(err)
 		}
 
 		// Git reports this worktree (it knows about it)
-		ops := &mockOps{
-			worktrees: []git.RawWorktree{
-				{Path: tmp, HEAD: "abc", Branch: "refs/heads/main"},
-				{Path: claudeWT, HEAD: "def", Branch: "refs/heads/feat-z"},
-			},
-		}
+		mockGitWorktreeList(t, []git.RawWorktree{
+			{Path: tmp, HEAD: "abc", Branch: "refs/heads/main"},
+			{Path: managedWT, HEAD: "def", Branch: "refs/heads/feat-z"},
+		}, nil)
 
-		wts, err := List(ops, tmp)
+		wts, err := List(tmp, worktreesDir)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -321,28 +305,26 @@ func TestList(t *testing.T) {
 		if found == nil {
 			t.Fatal("feat-z not found")
 		}
-		if found.Source != SourceClaude {
-			t.Errorf("Source = %v, want SourceClaude", found.Source)
+		if found.Source != SourceManaged {
+			t.Errorf("Source = %v, want SourceManaged", found.Source)
 		}
 	})
 
 	t.Run("sorting main first then alphabetical", func(t *testing.T) {
 		tmp := t.TempDir()
 
-		// Create claude worktrees
+		worktreesDir := filepath.Join(tmp, ".managed", "worktrees")
 		for _, name := range []string{"zebra", "alpha"} {
-			dir := filepath.Join(tmp, ".claude", "worktrees", name)
+			dir := filepath.Join(worktreesDir, name)
 			os.MkdirAll(dir, 0755)
 			os.WriteFile(filepath.Join(dir, ".git"), []byte("gitdir: ..."), 0644)
 		}
 
-		ops := &mockOps{
-			worktrees: []git.RawWorktree{
-				{Path: tmp, HEAD: "abc", Branch: "refs/heads/main"},
-			},
-		}
+		mockGitWorktreeList(t, []git.RawWorktree{
+			{Path: tmp, HEAD: "abc", Branch: "refs/heads/main"},
+		}, nil)
 
-		wts, err := List(ops, tmp)
+		wts, err := List(tmp, worktreesDir)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

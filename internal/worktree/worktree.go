@@ -38,6 +38,10 @@ type Worktree struct {
 	ModTime time.Time
 }
 
+// gitWorktreeListFunc is the function used to list git worktrees.
+// Tests can override this to avoid requiring a real git repository.
+var gitWorktreeListFunc = git.WorktreeList
+
 // List returns all discovered worktrees, merging git worktrees and the managed worktrees directory.
 // worktreesDir is the resolved absolute path to the managed worktrees directory.
 func List(repoRoot, worktreesDir string) ([]Worktree, error) {
@@ -47,7 +51,7 @@ func List(repoRoot, worktreesDir string) ([]Worktree, error) {
 	absWorktreesDir = filepath.Clean(absWorktreesDir)
 
 	// 1. Parse git worktree list
-	rawList, err := git.WorktreeList(repoRoot)
+	rawList, err := gitWorktreeListFunc(repoRoot)
 	if err != nil {
 		return nil, err
 	}
