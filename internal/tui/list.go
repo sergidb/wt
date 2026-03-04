@@ -32,7 +32,7 @@ func initialModel(repoRoot string, wts []worktree.Worktree) model {
 	return model{
 		worktrees: wts,
 		repoRoot:  repoRoot,
-		actions:   []string{"cd", "info", "remove", "back"},
+		actions:   []string{"cd", "run", "info", "remove", "back"},
 	}
 }
 
@@ -103,6 +103,9 @@ func (m model) updateActions(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch action {
 		case "cd":
 			m.result = shell.CdPrefix + wt.Path
+			return m, tea.Quit
+		case "run":
+			m.result = "run:" + wt.Path
 			return m, tea.Quit
 		case "info":
 			m.result = "info:" + wt.Name

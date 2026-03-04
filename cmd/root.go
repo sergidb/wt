@@ -3,8 +3,11 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
+	"github.com/sergidb/wt/internal/config"
 	"github.com/sergidb/wt/internal/git"
+	"github.com/sergidb/wt/internal/runner"
 	"github.com/sergidb/wt/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -26,6 +29,15 @@ var rootCmd = &cobra.Command{
 
 		if result == "config" {
 			return tui.RunConfig(repoRoot)
+		}
+
+		if strings.HasPrefix(result, "run:") {
+			wtPath := strings.TrimPrefix(result, "run:")
+			cfg, err := config.Load(repoRoot)
+			if err != nil {
+				return err
+			}
+			return runner.Run(cfg.Services, wtPath)
 		}
 
 		if result != "" {
