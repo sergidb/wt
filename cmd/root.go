@@ -24,6 +24,10 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 
+		if result == "config" {
+			return tui.RunConfig(repoRoot)
+		}
+
 		if result != "" {
 			fmt.Print(result)
 		}

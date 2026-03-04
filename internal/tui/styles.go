@@ -31,4 +31,17 @@ var (
 	helpStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241")).
 			MarginTop(1)
+
+	labelStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("99")).
+			Bold(true)
+
+	inputStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("255"))
+
+	successStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("35"))
+
+	errorStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("196"))
 )

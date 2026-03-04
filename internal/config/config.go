@@ -57,3 +57,24 @@ func Load(repoRoot string) (*Config, error) {
 
 	return &cfg, nil
 }
+
+// LoadOrEmpty reads .wt.yaml if it exists, or returns an empty config.
+func LoadOrEmpty(repoRoot string) *Config {
+	cfg, err := Load(repoRoot)
+	if err != nil {
+		return &Config{Services: make(map[string]Service)}
+	}
+	return cfg
+}
+
+// Save writes the config to .wt.yaml in the given repo root.
+func Save(repoRoot string, cfg *Config) error {
+	path := filepath.Join(repoRoot, FileName)
+
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("marshaling config: %w", err)
+	}
+
+	return os.WriteFile(path, data, 0644)
+}

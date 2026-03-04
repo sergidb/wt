@@ -75,6 +75,9 @@ func (m model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.result = "rm:" + wt.Name
 			return m, tea.Quit
 		}
+	case "c":
+		m.result = "config"
+		return m, tea.Quit
 	}
 	return m, nil
 }
@@ -169,7 +172,7 @@ func (m model) viewList() string {
 		}
 	}
 
-	b.WriteString(helpStyle.Render("↑/↓ navigate • enter select • d delete • q quit"))
+	b.WriteString(helpStyle.Render("↑/↓ navigate • enter select • d delete • c config • q quit"))
 
 	return b.String()
 }
