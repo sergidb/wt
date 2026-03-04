@@ -74,7 +74,13 @@ wt run                    # Run services for the current worktree
 
 Output is docker-compose style with colored `[service]` prefixes. `Ctrl+C` stops all.
 
+Or simply use my favorite method (I'm [@sergidb](https://github.com/sergidb)) and just type `wt` — navigate through the fast and easy interactive menu to run, switch, or manage anything.
+
 You can also create this config interactively with `wt config`.
+
+## Contributing
+
+Give it a try! If you find bugs, have ideas, or want to improve something — [open an issue](https://github.com/sergidb/wt/issues) or submit a PR. All contributions are welcome.
 
 ## License
 
