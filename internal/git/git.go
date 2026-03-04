@@ -24,10 +24,17 @@ func (w RawWorktree) BranchShort() string {
 
 // RepoRoot returns the main repository root directory.
 // Works from inside any worktree by using --git-common-dir.
+// If the current directory no longer exists (deleted worktree),
+// it walks up the path to find the repo root.
 func RepoRoot() (string, error) {
 	out, err := exec.Command("git", "rev-parse", "--git-common-dir").Output()
 	if err != nil {
-		return "", fmt.Errorf("not inside a git repository: %w", err)
+		// Current dir may not exist (deleted worktree). Try walking up.
+		root, fallbackErr := repoRootFromPath()
+		if fallbackErr != nil {
+			return "", fmt.Errorf("not inside a git repository: %w", err)
+		}
+		return root, nil
 	}
 
 	gitDir := strings.TrimSpace(string(out))
@@ -48,6 +55,32 @@ func RepoRoot() (string, error) {
 	root := filepath.Dir(gitDir)
 
 	return root, nil
+}
+
+// repoRootFromPath walks up from the current working directory path
+// looking for a .git directory. Useful when the cwd has been deleted
+// (e.g. a removed worktree) but the path still contains the repo root.
+func repoRootFromPath() (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+
+	dir := cwd
+	for {
+		gitPath := filepath.Join(dir, ".git")
+		if info, err := os.Stat(gitPath); err == nil && info.IsDir() {
+			return dir, nil
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+
+	return "", fmt.Errorf("no git repository found in parent directories of %s", cwd)
 }
 
 // WorktreeRoot returns the top-level directory of the current worktree.

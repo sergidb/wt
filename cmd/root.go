@@ -9,6 +9,7 @@ import (
 	"github.com/sergidb/wt/internal/git"
 	"github.com/sergidb/wt/internal/runner"
 	"github.com/sergidb/wt/internal/tui"
+	"github.com/sergidb/wt/internal/worktree"
 	"github.com/spf13/cobra"
 )
 
@@ -40,6 +41,17 @@ var rootCmd = &cobra.Command{
 			return runner.Run(cfg.Services, wtPath)
 		}
 
+		if strings.HasPrefix(result, "rm:") {
+			name := strings.TrimPrefix(result, "rm:")
+			if err := git.WorktreeRemove(
+				findWorktreePath(repoRoot, name), false,
+			); err != nil {
+				return fmt.Errorf("failed to remove worktree '%s': %w", name, err)
+			}
+			fmt.Fprintf(os.Stderr, "Removed worktree '%s'\n", name)
+			return nil
+		}
+
 		if result != "" {
 			fmt.Print(result)
 		}
@@ -52,4 +64,16 @@ func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
+}
+
+func findWorktreePath(repoRoot, name string) string {
+	wts, err := worktree.List(repoRoot)
+	if err != nil {
+		return name
+	}
+	wt, err := worktree.FindByName(wts, name)
+	if err != nil {
+		return name
+	}
+	return wt.Path
 }
