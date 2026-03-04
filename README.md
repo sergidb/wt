@@ -1,6 +1,6 @@
 # wt
 
-A fast terminal tool for navigating and managing git worktrees. Built for developers who use Claude Code or multiple worktrees and need to quickly switch between them, run services, and keep things tidy.
+This is my approach to a worktree manager — built to make my day-to-day easier. A fast terminal tool for navigating and managing git worktrees, designed for developers who use Claude Code or multiple worktrees and need to quickly switch between them, run services, and keep things tidy.
 
 ## Why
 
